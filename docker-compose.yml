@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pricetracker_db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: qwerty
+      POSTGRES_DB: pricetracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_price:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: pricetracker_rmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    restart: unless-stopped
+
+  api:
+    container_name: price_api
+    build:
+      context: .
+      dockerfile: ./api/Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - rabbitmq
+    restart: unless-stopped
+
+  worker:
+    container_name: price_worker
+    build:
+      context: .
+      dockerfile: ./worker/Dockerfile
+      args:
+        app_name: price_tracker
+    depends_on:
+      - postgres
+      - rabbitmq
+    restart: unless-stopped
+
+volumes:
+  postgres_price:
