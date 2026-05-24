@@ -21,8 +21,8 @@ type TrackResponse struct {
 }
 
 type Task struct {
-	Id  int
-	Url string
+	Id  int `json:"id"`
+	Url string `json:"url"`
 }
 
 func main() {
