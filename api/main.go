@@ -3,10 +3,12 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	_ "github.com/jackc/pgx/v5/stdlib"
 	"log"
 	"net/http"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
+
+	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type TrackRequest struct {
@@ -14,8 +16,13 @@ type TrackRequest struct {
 }
 
 type TrackResponse struct {
-	Id int `json:"id"`
+	Id     int    `json:"id"`
 	Status string `json:"status"`
+}
+
+type Task struct {
+	Id  int
+	Url string
 }
 
 func main() {
@@ -30,8 +37,35 @@ func main() {
 	if err := db.Ping(); err != nil {
 		log.Fatalf("База не отвечает: %v", err)
 	}
-
 	log.Println("Успешное подключение к бд")
+
+	conn, err := amqp.Dial("amqp://quest:quest@localhost:5672/")
+	if err != nil {
+		log.Fatalf("Не удалось подключиться к RabbitMq: %v", err)
+	}
+	defer conn.Close()
+	log.Println("Успешное подключение к RabbitMq!")
+
+	ch, err := conn.Channel()
+	if err != nil {
+		log.Fatalf("Не удалось открыть канал: %v", err)
+	}
+	defer ch.Close()
+	log.Println("Успешно подключились к каналу!")
+
+	q, err := ch.QueueDeclare(
+		"parsing_tasks",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		log.Fatalf("Не удалось объявить очередь: %v", err)
+	}
+
+	log.Printf("Очередь объявлена! Имя: %s, Сообщений: %d", q.Name, q.Messages)
 
 	http.HandleFunc("/track", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -52,8 +86,36 @@ func main() {
 			return
 		}
 
-		res := TrackResponse {
-			Id: id,
+		t := Task{
+			Id:  id,
+			Url: req.Url,
+		}
+
+		bodyBytes, err := json.Marshal(t)
+		if err != nil {
+			http.Error(w, "Не удалось преобразовать структуру", http.StatusInternalServerError)
+			return
+		}
+
+		err = ch.PublishWithContext(
+			r.Context(),
+			"",
+			"parsing_tasks",
+			false,
+			false,
+			amqp.Publishing{
+				ContentType: "application/json",
+				Body:        bodyBytes,
+			})
+		if err != nil {
+			http.Error(w, "Ошибка публикации", http.StatusInternalServerError)
+			return
+		}
+
+		log.Println("Сообщение отправлено!")
+
+		res := TrackResponse{
+			Id:     id,
 			Status: "Сохранено!",
 		}
 
