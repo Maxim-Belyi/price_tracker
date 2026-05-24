@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"log"
+	"math/rand"
+	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -75,22 +77,35 @@ func main() {
 		for msg := range msgs {
 			log.Printf("Получено сообщение: %s", msg.Body)
 
-			t:= Task {
-				Id: id,
-				Url: msg.Url,
+			var t Task
+
+			if err := json.Unmarshal(msg.Body, &t); err != nil {
+				log.Printf("Ошибка декодирования Json: %v", err)
+				msg.Nack(false, false)
+				continue
 			}
 
-			if err := json.NewDecoder(msg.Body).Decode(t); err != nil {
-				log.Printf("Некорректный Json!")
-				return
-			}
+			log.Printf("Начинаю парсинг для URL: %s", t.Url)
+			time.Sleep(2 * time.Second)
+			price := float64(rand.Intn(1000)) + 100.00
 
+			query := `
+			UPDATE items SET current_price = $1, 
+			status = 'processed',
+			updated_at = CURRENT_TIMESTAMP WHERE id = $2
+			`
+
+			if _, err := db.Exec(query, price, t.Id); err != nil {
+				log.Printf("Ошибка обновления БД: %v", err)
+				msg.Nack(false, true)
+				continue
+			}
+			
+			msg.Ack(false)
+			log.Printf("Успешно! Товар ID %d получил цену %.2f", t.Id, price)
 
 		}
-	}
-
-
-
-
-
+	}()
+	log.Println("Worker запущен! Ожидание сообщений...")
+	<-forever
 }
