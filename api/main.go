@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 
@@ -26,7 +27,10 @@ type Task struct {
 }
 
 func main() {
-	dsn := "postgres://admin:qwerty@localhost:5432/pricetracker"
+	dsn := os.Getenv("DB_DSN")
+	if dsn == "" {
+		dsn= "postgres://admin:qwerty@localhost:5432/pricetracker"
+	}
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -39,7 +43,11 @@ func main() {
 	}
 	log.Println("Успешное подключение к бд")
 
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	rmqUrl := os.Getenv("RMQ_URL")
+	if rmqUrl == "" {
+		rmqUrl = "amqp://guest:guest@localhost:5672/"
+	}
+	conn, err := amqp.Dial(rmqUrl)
 	if err != nil {
 		log.Fatalf("Не удалось подключиться к RabbitMq: %v", err)
 	}

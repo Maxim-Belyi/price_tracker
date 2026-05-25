@@ -26,10 +26,13 @@ services:
   api:
     container_name: price_api
     build:
-      context: .
+      context: ./api
       dockerfile: ./api/Dockerfile
     ports:
       - "8080:8080"
+    environment:
+      - DB_DSN=postgres://admin:qwerty@postgres:5432/pricetracker
+      - RMQ_URL=amqp://guest:guest@rabbitmq:5672/  
     depends_on:
       - postgres
       - rabbitmq
@@ -38,10 +41,13 @@ services:
   worker:
     container_name: price_worker
     build:
-      context: .
+      context: ./worker
       dockerfile: ./worker/Dockerfile
-      args:
-        app_name: price_tracker
+    environment:
+      - DB_DSN=postgres://admin:qwerty@postgres:5432/pricetracker
+      - RMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    args:
+      app_name: price_tracker
     depends_on:
       - postgres
       - rabbitmq

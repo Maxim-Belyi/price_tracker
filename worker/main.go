@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"math/rand"
+	"os"
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -12,12 +13,15 @@ import (
 )
 
 type Task struct {
-	Id  int `json:"id"`
+	Id  int    `json:"id"`
 	Url string `json:"url"`
 }
 
 func main() {
-	dsn := "postgres://admin:qwerty@localhost:5432/pricetracker"
+	dsn := os.Getenv("DB_DSN")
+	if dsn == "" {
+		dsn = "postgres://admin:qwerty@localhost:5432/pricetracker"
+	}
 
 	db, err := sql.Open("pgx", dsn)
 	if err != nil {
@@ -30,7 +34,11 @@ func main() {
 	}
 	log.Println("Успешное подключение к бд")
 
-	conn, err := amqp.Dial("amqp://guest:guest@localhost:5672/")
+	rmqUrl := os.Getenv("RMQ_URL")
+	if rmqUrl == "" {
+		rmqUrl = "amqp://guest:guest@localhost:5672/"
+	}
+	conn, err := amqp.Dial(rmqUrl)
 	if err != nil {
 		log.Fatalf("Не удалось подключиться к RabbitMq: %v", err)
 	}
@@ -44,7 +52,7 @@ func main() {
 	defer ch.Close()
 	log.Printf("Успешно подключились к каналу!")
 
-		q, err := ch.QueueDeclare(
+	q, err := ch.QueueDeclare(
 		"parsing_tasks",
 		true,
 		false,
@@ -52,7 +60,7 @@ func main() {
 		false,
 		nil,
 	)
-		if err != nil {
+	if err != nil {
 		log.Fatalf("Не удалось объявить очередь: %v", err)
 	}
 
@@ -100,7 +108,7 @@ func main() {
 				msg.Nack(false, true)
 				continue
 			}
-			
+
 			msg.Ack(false)
 			log.Printf("Успешно! Товар ID %d получил цену %.2f", t.Id, price)
 

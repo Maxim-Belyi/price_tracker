@@ -7,6 +7,6 @@ RUN go mid download
 
 COPY . .
 
-RUN go build -o worker_app ./worker/cmd/
+RUN go build -o worker_app main.go
 
 FROM alpine:latest
